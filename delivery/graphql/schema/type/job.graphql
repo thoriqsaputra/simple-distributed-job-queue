@@ -1,13 +1,23 @@
+# Represents a single job in the system.
 type Job {
-	id: String!
-	task: String!
-	status: String!
-	attempts: Int!
+  id: ID!
+  task: String!
+  payload: String
+  status: String! # Maps to entity.JobStatus
+  attempts: Int!
+  maxRetries: Int!
+  createdAt: String! # Using String for time, can be changed to a custom scalar if needed
+  startedAt: String # Nullable
+  completedAt: String # Nullable
+  error: String # Nullable
 }
 
+# Represents the aggregated statistics of job statuses.
 type JobStatus {
+  total: Int!
   pending: Int!
   running: Int!
-  failed: Int!
   completed: Int!
+  failed: Int!
+  retrying: Int!
 }
