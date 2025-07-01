@@ -8,21 +8,35 @@ import (
 	"sync"
 )
 
+// jobRepository implements the _interface.JobRepository using an in-memory map.
 type jobRepository struct {
 	mu      sync.RWMutex
 	inMemDb map[string]*entity.Job
 }
 
-// Save Job
+// NewJobRepository creates and returns a new in-memory job repository.
+func NewJobRepository() _interface.JobRepository {
+	return &jobRepository{
+		inMemDb: make(map[string]*entity.Job),
+	}
+}
+
+// Save saves a new job or updates an existing job in the in-memory database.
+// This method handles both creation and full updates for a job.
 func (t *jobRepository) Save(ctx context.Context, job *entity.Job) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	// Ensure job ID is not empty
+	if job.ID == "" {
+		return errors.New("job ID cannot be empty for save/update operation")
+	}
 
 	t.inMemDb[job.ID] = job
 	return nil
 }
 
-// Find Job By ID
+// FindByID retrieves a job by its ID from the in-memory database.
 func (t *jobRepository) FindByID(ctx context.Context, id string) (*entity.Job, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -31,40 +45,99 @@ func (t *jobRepository) FindByID(ctx context.Context, id string) (*entity.Job, e
 	if !exists {
 		return nil, errors.New("job not found")
 	}
-	return job, nil
+	// Return a copy to prevent external modification without using Save/Update
+	copiedJob := *job
+	return &copiedJob, nil
 }
 
-// FindAll Job
+// FindAll retrieves all jobs from the in-memory database.
 func (t *jobRepository) FindAll(ctx context.Context) ([]*entity.Job, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
 	var jobs []*entity.Job
 	for _, job := range t.inMemDb {
-		jobs = append(jobs, job)
+		// Return copies to prevent external modification without using Save/Update
+		copiedJob := *job
+		jobs = append(jobs, &copiedJob)
 	}
 	return jobs, nil
 }
 
-// Initiator ...
-type Initiator func(s *jobRepository) *jobRepository
+// Update updates an existing job in the in-memory database.
+// It's explicitly added for semantic clarity, though Save could perform similar function.
+func (t *jobRepository) Update(ctx context.Context, job *entity.Job) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-// NewJobRepository ...
-func NewJobRepository() Initiator {
-	return func(q *jobRepository) *jobRepository {
-		return q
+	if job.ID == "" {
+		return errors.New("job ID cannot be empty for update operation")
 	}
+
+	// Check if the job exists before updating
+	if _, exists := t.inMemDb[job.ID]; !exists {
+		return errors.New("job not found for update")
+	}
+
+	t.inMemDb[job.ID] = job
+	return nil
 }
 
-// SetInMemConnection set database client connection
-func (i Initiator) SetInMemConnection(inMemDb map[string]*entity.Job) Initiator {
-	return func(s *jobRepository) *jobRepository {
-		i(s).inMemDb = inMemDb
-		return s
+// GetStatusStatistics calculates and returns the count of jobs for each status.
+func (t *jobRepository) GetStatusStatistics(ctx context.Context) (*entity.JobStatusStatistics, error) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	stats := &entity.JobStatusStatistics{
+		Total: 0,
+		Pending:   0,
+		Running:   0,
+		Completed: 0,
+		Failed:    0,
+		Retrying:  0,
 	}
+
+	for _, job := range t.inMemDb {
+		println("Processing job ID:", job.ID, "with status:", job.Status) // Debugging output
+		stats.Total++
+		switch job.Status {
+		case entity.JobStatusPending:
+			stats.Pending++
+		case entity.JobStatusRunning:
+			stats.Running++
+		case entity.JobStatusCompleted:
+			stats.Completed++
+		case entity.JobStatusFailed:
+			stats.Failed++
+		case entity.JobStatusRetrying:
+			stats.Retrying++
+		}
+	}
+	return stats, nil
 }
 
-// Build ...
-func (i Initiator) Build() _interface.JobRepository {
-	return i(&jobRepository{})
+// FindManyByIDs retrieves multiple jobs by their IDs from the in-memory database.
+// This is an efficient batch-loading method for the Dataloader.
+func (t *jobRepository) FindManyByIDs(ctx context.Context, ids []string) ([]*entity.Job, error) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	// Create a map for quick lookups
+	resultsMap := make(map[string]*entity.Job)
+	for _, job := range t.inMemDb {
+		resultsMap[job.ID] = job
+	}
+
+	// Build the result slice in the same order as the input IDs, with nil for not-found items.
+	resultsOrdered := make([]*entity.Job, len(ids))
+	for i, id := range ids {
+		if job, ok := resultsMap[id]; ok {
+			copiedJob := *job // Return a copy to prevent external modification
+			resultsOrdered[i] = &copiedJob
+		} else {
+			resultsOrdered[i] = nil // Not found, Dataloader expects nil
+		}
+	}
+
+	return resultsOrdered, nil
 }
