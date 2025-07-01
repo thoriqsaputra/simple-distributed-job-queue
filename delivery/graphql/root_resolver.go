@@ -1,42 +1,27 @@
 package graphql
 
 import (
+	_dataloader "jobqueue/delivery/graphql/dataloader"
 	"jobqueue/delivery/graphql/mutation"
 	"jobqueue/delivery/graphql/query"
+	_interface "jobqueue/interface"
 )
 
+// rootResolver is the entry point for all GraphQL queries and mutations.
 type rootResolver struct {
-	mutation.JobMutation
+	// Embed the query and mutation resolvers
 	query.JobQuery
+	mutation.JobMutation
 }
 
-// Initiator ...
-type Initiator func(r *rootResolver) *rootResolver
-
-// New ...
-func New() Initiator {
-	return func(r *rootResolver) *rootResolver {
-		return r
+// NewRootResolver creates and returns a new rootResolver instance.
+// It takes the JobService and a GeneralDataloader as dependencies
+// and initializes the JobQuery and JobMutation resolvers.
+func NewRootResolver(jobService _interface.JobService, dl *_dataloader.GeneralDataloader) *rootResolver {
+	return &rootResolver{
+		// Initialize JobQuery with its dependencies
+		JobQuery: query.NewJobQuery(jobService, dl),
+		// Initialize JobMutation with its dependencies
+		JobMutation: mutation.NewJobMutation(jobService, dl),
 	}
-}
-
-// SetJobMutation ...
-func (i Initiator) SetJobMutation(jobMutation mutation.JobMutation) Initiator {
-	return func(r *rootResolver) *rootResolver {
-		i(r).JobMutation = jobMutation
-		return r
-	}
-}
-
-// SetJobQuery ...
-func (i Initiator) SetJobQuery(jobQuery query.JobQuery) Initiator {
-	return func(r *rootResolver) *rootResolver {
-		i(r).JobQuery = jobQuery
-		return r
-	}
-}
-
-// Build ...
-func (i Initiator) Build() *rootResolver {
-	return i(&rootResolver{})
 }

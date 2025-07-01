@@ -1,4 +1,12 @@
 type Mutation {
-  # Create New Job
-  Enqueue(task: String!): Job!
+  # Create New Job(s) simultaneously.
+  # This mutation can create multiple jobs in a single request.
+  SimultaneousCreateJob(jobs: [NewJobInput!]!): [Job!]!
+}
+
+# Input type for creating a new job.
+input NewJobInput {
+  task: String! # The type of job (e.g., "default-job", "unstable-job")
+  payload: String # Optional JSON string or data for the job
+  maxRetries: Int = 3 # Maximum number of times the job can be retried if it fails
 }
