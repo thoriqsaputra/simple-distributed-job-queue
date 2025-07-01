@@ -1,26 +1,26 @@
-mutation SimultaneousCreateJob($Job1: String!, $Job2: String!, $Job3: String!) {
-  job1: Enqueue(task:$Job1) {
+mutation CreateJobsForTesting {
+  jobsCreated: SimultaneousCreateJob(jobs: [
+    { task: "default-job", payload: "job-A" },
+    
+    { task: "default-job", payload: "job-B" },
+    
+    { task: "unstable-job", payload: "unstable-task", maxRetries: 3 }
+  ]) {
     id
-  }
-  job2: Enqueue(task:$Job2) {
-    id
-  }
-  job3: Enqueue(task:$Job3) {
-    id
-  }
-}
-
-mutation SimulateUnstableJob {
-  Enqueue(task: "unstable-job") {
-    id
-    attempts
+    task
     status
+    attempts
+    maxRetries
+    error
   }
 }
 
 query GetAllJobs {
   Jobs {
     id
+    task
+    payload
+    status
   }
 }
 
@@ -34,9 +34,11 @@ query GetJobById {
 
 query GetAllJobStatus{
    JobStatus{
+    total
     pending
     running
     failed
+    retrying
     completed
   }
 }
